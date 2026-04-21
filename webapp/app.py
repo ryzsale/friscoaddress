@@ -3,10 +3,13 @@
 
 import hashlib
 import io
+import json
 import os
 import re
+import secrets
 import sqlite3
 import sys
+from datetime import datetime, timedelta
 from urllib.parse import quote_plus
 
 import pandas as pd
@@ -28,6 +31,7 @@ from muslim_filter import is_muslim_name
 app = Flask(__name__)
 app.secret_key = "frisco-admin-secret-2024"
 app.jinja_env.filters["urlencode"] = quote_plus
+app.jinja_env.filters["fromjson"]  = json.loads
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 login_manager = LoginManager(app)
@@ -60,6 +64,56 @@ def init_db():
                 ignored      INTEGER DEFAULT 0
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS share_tokens (
+                token      TEXT PRIMARY KEY,
+                filters    TEXT NOT NULL,
+                label      TEXT DEFAULT '',
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+
+def create_share_token(filters: dict, label: str = "", days: int = 7) -> str:
+    token = secrets.token_urlsafe(24)
+    now   = datetime.utcnow()
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO share_tokens (token, filters, label, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (token, json.dumps(filters), label,
+              now.isoformat(), (now + timedelta(days=days)).isoformat()))
+        conn.commit()
+    return token
+
+def get_share_token(token: str):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM share_tokens WHERE token=?", (token,)
+        ).fetchone()
+    if not row:
+        return None
+    if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
+        return None
+    return dict(row)
+
+def list_share_tokens():
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM share_tokens ORDER BY created_at DESC"
+        ).fetchall()
+    now = datetime.utcnow()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["expired"] = datetime.utcnow() > datetime.fromisoformat(d["expires_at"])
+        result.append(d)
+    return result
+
+def delete_share_token(token: str):
+    with get_db() as conn:
+        conn.execute("DELETE FROM share_tokens WHERE token=?", (token,))
         conn.commit()
 
 def record_id(rec):
@@ -349,6 +403,91 @@ def route():
         return redirect(url_for("streets"))
 
     return redirect(make_gmaps_route(addresses))
+
+
+@app.route("/share/create", methods=["POST"])
+@login_required
+def share_create():
+    data    = request.get_json(force=True)
+    filters = data.get("filters", {})
+    label   = data.get("label", "")
+    days    = int(data.get("days", 7))
+    token   = create_share_token(filters, label, days)
+    link    = request.host_url.rstrip("/") + url_for("share_view", token=token)
+    return jsonify(ok=True, link=link, token=token)
+
+
+@app.route("/share/delete/<token>", methods=["POST"])
+@login_required
+def share_delete(token):
+    delete_share_token(token)
+    return jsonify(ok=True)
+
+
+@app.route("/share/list")
+@login_required
+def share_list():
+    return render_template("shares.html", tokens=list_share_tokens())
+
+
+@app.route("/share/<token>")
+def share_view(token):
+    record = get_share_token(token)
+    if not record:
+        return render_template("share_expired.html"), 404
+    filters  = json.loads(record["filters"])
+    q        = filters.get("q", "")
+    zip_f    = filters.get("zip", "")
+    muslim_f = filters.get("muslim", "")
+    status_f = filters.get("status", "")
+    street_f = filters.get("street", "")
+
+    df      = apply_filters(DF.copy(), q, zip_f, muslim_f, status_f, show_ignored=False, street_f=street_f)
+    total   = len(df)
+    records = enrich(df.head(200))   # cap preview at 200 rows
+
+    return render_template("share_view.html",
+        record=record, filters=filters, records=records,
+        total=total, token=token,
+    )
+
+
+@app.route("/share/<token>/download")
+def share_download(token):
+    record = get_share_token(token)
+    if not record:
+        return "Link expired or invalid.", 404
+    filters  = json.loads(record["filters"])
+    q        = filters.get("q", "")
+    zip_f    = filters.get("zip", "")
+    muslim_f = filters.get("muslim", "")
+    status_f = filters.get("status", "")
+    street_f = filters.get("street", "")
+    fmt      = request.args.get("fmt", "csv")
+
+    df  = apply_filters(DF.copy(), q, zip_f, muslim_f, status_f, show_ignored=False, street_f=street_f)
+    ann = get_annotations(df["rid"].tolist())
+    rows = []
+    for rec in df.to_dict("records"):
+        a = ann.get(rec["rid"], {})
+        rows.append({
+            "Last Name":      rec["last_name"],
+            "First Name":     rec["first_name"],
+            "Address":        rec["address"],
+            "Street":         rec["street"],
+            "City/State/ZIP": rec["city_state_zip"],
+            "Status":         a.get("status", ""),
+            "Last Visited":   a.get("last_visited", ""),
+            "Comments":       a.get("comments", ""),
+        })
+    if fmt == "xlsx":
+        return export_xlsx(rows)
+    buf = io.StringIO()
+    pd.DataFrame(rows).to_csv(buf, index=False)
+    buf.seek(0)
+    return send_file(io.BytesIO(buf.getvalue().encode()),
+                     mimetype="text/csv", as_attachment=True,
+                     download_name="frisco_share.csv")
 
 
 @app.route("/export")

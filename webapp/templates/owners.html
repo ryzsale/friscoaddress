@@ -5,26 +5,49 @@
   <title>Frisco Admin — Owners</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { background: #f0f4f8; }
+    body { background: #f0f4f8; font-size: 0.875rem; }
     .navbar { background: #1F4E79; }
     .navbar-brand, .nav-link { color: #fff !important; }
     .card { border: none; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-    .table thead th { background: #1F4E79; color: #fff; border: none; font-size: 0.85rem; }
-    .table tbody tr:hover { background: #e8f0fb; }
-    .badge-muslim { background: #1F4E79; }
-    .badge-other { background: #6c757d; }
-    .filter-bar { background: #fff; border-radius: 10px; padding: 16px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-    .stat-card { background: #1F4E79; color: #fff; border-radius: 10px; padding: 16px 20px; }
+    .table thead th { background: #1F4E79; color: #fff; border: none; font-size: 0.8rem; white-space: nowrap; }
+    .table tbody tr:hover { background: #eef3fb; }
+    .filter-bar { background: #fff; border-radius: 10px; padding: 14px 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .stat-card { background: #1F4E79; color: #fff; border-radius: 10px; padding: 14px 18px; }
     .stat-card.green { background: #198754; }
     .page-link { color: #1F4E79; }
     .page-item.active .page-link { background: #1F4E79; border-color: #1F4E79; }
-    .export-btn { background: #198754; border-color: #198754; }
-    .export-btn:hover { background: #146c43; border-color: #146c43; }
+
+    /* status badges */
+    .badge-muslim     { background:#1F4E79; }
+    .badge-nonmuslim  { background:#6c757d; }
+    .badge-notovisit  { background:#dc3545; }
+    .badge-auto       { background:#adb5bd; color:#333; }
+
+    /* inline editable fields */
+    .inline-select, .inline-date, .inline-comment {
+      border: 1px solid transparent; background: transparent;
+      border-radius: 4px; padding: 2px 4px; font-size: 0.8rem;
+      transition: border-color .15s;
+    }
+    .inline-select:hover, .inline-date:hover, .inline-comment:hover,
+    .inline-select:focus, .inline-date:focus, .inline-comment:focus {
+      border-color: #1F4E79; background: #fff; outline: none;
+    }
+    .inline-comment { width: 160px; }
+    .inline-date     { width: 130px; }
+    .inline-select   { width: 130px; }
+
+    /* ignored row */
+    tr.ignored-row td { opacity: .45; text-decoration: line-through; }
+    tr.ignored-row td:last-child { opacity: 1; text-decoration: none; }
+
+    .saving { opacity: .5; }
+    .saved-flash { color: #198754; font-size: 0.7rem; }
   </style>
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg mb-4">
+<nav class="navbar navbar-expand-lg mb-3">
   <div class="container-fluid px-4">
     <span class="navbar-brand fw-bold">🏠 Frisco Admin</span>
     <div class="ms-auto d-flex align-items-center gap-3">
@@ -37,17 +60,17 @@
 <div class="container-fluid px-4">
 
   <!-- Stats -->
-  <div class="row g-3 mb-4">
+  <div class="row g-3 mb-3">
     <div class="col-auto">
       <div class="stat-card">
-        <div class="small opacity-75">Total Records</div>
-        <div class="fs-4 fw-bold">{{ "{:,}".format(total) }}</div>
+        <div class="small opacity-75">Filtered Records</div>
+        <div class="fs-5 fw-bold">{{ "{:,}".format(total) }}</div>
       </div>
     </div>
     <div class="col-auto">
       <div class="stat-card green">
-        <div class="small opacity-75">Showing</div>
-        <div class="fs-4 fw-bold">{{ records|length }}</div>
+        <div class="small opacity-75">This Page</div>
+        <div class="fs-5 fw-bold">{{ records|length }}</div>
       </div>
     </div>
   </div>
@@ -55,9 +78,9 @@
   <!-- Filter bar -->
   <div class="filter-bar mb-3">
     <form method="GET" action="{{ url_for('owners') }}" class="row g-2 align-items-end">
-      <div class="col-md-4">
+      <div class="col-md-3">
         <label class="form-label small fw-semibold mb-1">Search name / address</label>
-        <input type="text" name="q" class="form-control form-control-sm" value="{{ q }}" placeholder="e.g. Khan, 5th Ave...">
+        <input type="text" name="q" class="form-control form-control-sm" value="{{ q }}" placeholder="Khan, 5th Ave…">
       </div>
       <div class="col-md-2">
         <label class="form-label small fw-semibold mb-1">Zip Code</label>
@@ -69,22 +92,38 @@
         </select>
       </div>
       <div class="col-md-2">
-        <label class="form-label small fw-semibold mb-1">Filter</label>
+        <label class="form-label small fw-semibold mb-1">Auto-Detect</label>
         <select name="muslim" class="form-select form-select-sm">
-          <option value="" {% if muslim_f == "" %}selected{% endif %}>All Owners</option>
-          <option value="yes" {% if muslim_f == "yes" %}selected{% endif %}>Muslim Only</option>
-          <option value="no" {% if muslim_f == "no" %}selected{% endif %}>Non-Muslim Only</option>
+          <option value=""  {% if muslim_f == ""    %}selected{% endif %}>All</option>
+          <option value="yes" {% if muslim_f == "yes" %}selected{% endif %}>Muslim</option>
+          <option value="no"  {% if muslim_f == "no"  %}selected{% endif %}>Non-Muslim</option>
         </select>
       </div>
-      <div class="col-auto">
-        <button type="submit" class="btn btn-sm btn-primary px-4">Filter</button>
-        <a href="{{ url_for('owners') }}" class="btn btn-sm btn-outline-secondary ms-1">Clear</a>
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold mb-1">Status</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="">All Statuses</option>
+          {% for s in status_options if s %}
+            <option value="{{ s }}" {% if s == status_f %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
       </div>
-      <div class="col-auto ms-auto">
-        <a href="{{ url_for('export', q=q, zip=zip_f, muslim=muslim_f) }}"
-           class="btn btn-sm export-btn text-white px-4">
-          ⬇ Export CSV
-        </a>
+      <div class="col-auto d-flex align-items-end gap-2">
+        <div class="form-check mb-1">
+          <input class="form-check-input" type="checkbox" name="show_ignored" value="1" id="chkIgnored"
+                 {% if show_ignored %}checked{% endif %}>
+          <label class="form-check-label small" for="chkIgnored">Show Ignored</label>
+        </div>
+      </div>
+      <div class="col-auto d-flex align-items-end gap-1">
+        <button type="submit" class="btn btn-sm btn-primary px-3">Filter</button>
+        <a href="{{ url_for('owners') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+      </div>
+      <div class="col-auto ms-auto d-flex align-items-end gap-1">
+        <a href="{{ url_for('export', q=q, zip=zip_f, muslim=muslim_f, status=status_f, fmt='csv') }}"
+           class="btn btn-sm btn-success px-3">⬇ CSV</a>
+        <a href="{{ url_for('export', q=q, zip=zip_f, muslim=muslim_f, status=status_f, fmt='xlsx') }}"
+           class="btn btn-sm btn-success px-3">⬇ Excel</a>
       </div>
     </form>
   </div>
@@ -99,16 +138,20 @@
             <th>Last Name</th>
             <th>First Name</th>
             <th>Address</th>
-            <th>City / State / ZIP</th>
-            <th>Type</th>
+            <th>City / ZIP</th>
+            <th>Auto</th>
+            <th>Status</th>
+            <th>Last Visited</th>
+            <th>Comments</th>
+            <th>Ignore</th>
           </tr>
         </thead>
         <tbody>
           {% set row_start = (page - 1) * per_page %}
           {% for rec in records %}
-          <tr>
-            <td class="text-muted small">{{ row_start + loop.index }}</td>
-            <td>{{ rec.last_name }}</td>
+          <tr id="row-{{ rec.rid }}" class="{% if rec.ignored %}ignored-row{% endif %}">
+            <td class="text-muted">{{ row_start + loop.index }}</td>
+            <td class="fw-semibold">{{ rec.last_name }}</td>
             <td>{{ rec.first_name }}</td>
             <td>{{ rec.address }}</td>
             <td class="text-muted small">{{ rec.city_state_zip }}</td>
@@ -116,12 +159,43 @@
               {% if rec.is_muslim %}
                 <span class="badge badge-muslim">Muslim</span>
               {% else %}
-                <span class="badge badge-other">Other</span>
+                <span class="badge badge-auto">Other</span>
               {% endif %}
+            </td>
+
+            <!-- Status -->
+            <td>
+              <select class="inline-select" onchange="save('{{ rec.rid }}','status',this.value,this)">
+                {% for s in status_options %}
+                  <option value="{{ s }}" {% if rec.status == s %}selected{% endif %}>
+                    {% if s %}{{ s }}{% else %}— pick —{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </td>
+
+            <!-- Last Visited -->
+            <td>
+              <input type="date" class="inline-date" value="{{ rec.last_visited }}"
+                     onchange="save('{{ rec.rid }}','last_visited',this.value,this)">
+            </td>
+
+            <!-- Comments -->
+            <td>
+              <input type="text" class="inline-comment" value="{{ rec.comments }}"
+                     placeholder="Add note…"
+                     onblur="save('{{ rec.rid }}','comments',this.value,this)">
+            </td>
+
+            <!-- Ignore -->
+            <td class="text-center">
+              <input type="checkbox" class="form-check-input"
+                     {% if rec.ignored %}checked{% endif %}
+                     onchange="save('{{ rec.rid }}','ignored', this.checked ? 1 : 0, this, true)">
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="text-center text-muted py-4">No records found.</td></tr>
+          <tr><td colspan="10" class="text-center text-muted py-4">No records found.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -133,15 +207,15 @@
   <nav class="mt-3">
     <ul class="pagination pagination-sm justify-content-center">
       <li class="page-item {% if page == 1 %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('owners', q=q, zip=zip_f, muslim=muslim_f, page=page-1) }}">‹</a>
+        <a class="page-link" href="{{ url_for('owners', q=q, zip=zip_f, muslim=muslim_f, status=status_f, show_ignored='1' if show_ignored else '', page=page-1) }}">‹</a>
       </li>
       {% for p in range([1, page-3]|max, [pages+1, page+4]|min) %}
         <li class="page-item {% if p == page %}active{% endif %}">
-          <a class="page-link" href="{{ url_for('owners', q=q, zip=zip_f, muslim=muslim_f, page=p) }}">{{ p }}</a>
+          <a class="page-link" href="{{ url_for('owners', q=q, zip=zip_f, muslim=muslim_f, status=status_f, show_ignored='1' if show_ignored else '', page=p) }}">{{ p }}</a>
         </li>
       {% endfor %}
       <li class="page-item {% if page == pages %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('owners', q=q, zip=zip_f, muslim=muslim_f, page=page+1) }}">›</a>
+        <a class="page-link" href="{{ url_for('owners', q=q, zip=zip_f, muslim=muslim_f, status=status_f, show_ignored='1' if show_ignored else '', page=page+1) }}">›</a>
       </li>
     </ul>
     <p class="text-center text-muted small">Page {{ page }} of {{ pages }} — {{ "{:,}".format(total) }} records</p>
@@ -149,6 +223,26 @@
   {% endif %}
 
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+async function save(rid, field, value, el, toggleIgnore = false) {
+  el.classList.add('saving');
+  try {
+    await fetch(`/annotate/${rid}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({[field]: value})
+    });
+    if (toggleIgnore) {
+      const row = document.getElementById('row-' + rid);
+      if (value == 1) row.classList.add('ignored-row');
+      else            row.classList.remove('ignored-row');
+    }
+  } finally {
+    el.classList.remove('saving');
+  }
+}
+</script>
 </body>
 </html>

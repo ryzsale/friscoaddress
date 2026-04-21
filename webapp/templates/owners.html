@@ -157,7 +157,7 @@
            class="btn btn-sm btn-success px-3">⬇ CSV</a>
         <a href="{{ url_for('export', q=q, zip=zip_f, muslim=muslim_f, status=status_f, fmt='xlsx') }}"
            class="btn btn-sm btn-success px-3">⬇ Excel</a>
-        <button class="btn btn-sm btn-outline-primary px-3"
+        <button type="button" class="btn btn-sm btn-outline-primary px-3"
                 onclick="openShareModal('{{ q }}','{{ zip_f }}','{{ muslim_f }}','{{ status_f }}','{{ street_f }}')">
           🔗 Share
         </button>

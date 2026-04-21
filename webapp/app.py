@@ -7,6 +7,7 @@ import io
 import os
 import sqlite3
 import sys
+from urllib.parse import quote_plus
 
 import pandas as pd
 from flask import (Flask, render_template, request, redirect,
@@ -23,8 +24,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "annotations.db")
 sys.path.insert(0, BASE_DIR)
 from muslim_filter import is_muslim_name
-
-from urllib.parse import quote_plus
 
 app = Flask(__name__)
 app.secret_key = "frisco-admin-secret-2024"
@@ -81,6 +80,11 @@ def get_annotations(rids: list[str]) -> dict:
         ).fetchall()
     return {r["rid"]: dict(r) for r in rows}
 
+def get_all_annotations() -> dict:
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM annotations").fetchall()
+    return {r["rid"]: dict(r) for r in rows}
+
 def upsert_annotation(rid, field, value):
     allowed = {"last_visited", "comments", "status", "ignored"}
     if field not in allowed:
@@ -90,6 +94,18 @@ def upsert_annotation(rid, field, value):
             INSERT INTO annotations (rid, {field}) VALUES (?, ?)
             ON CONFLICT(rid) DO UPDATE SET {field}=excluded.{field}
         """, (rid, value))
+        conn.commit()
+
+def bulk_upsert(rids: list[str], field: str, value):
+    allowed = {"status", "ignored"}
+    if field not in allowed:
+        return
+    with get_db() as conn:
+        for rid in rids:
+            conn.execute(f"""
+                INSERT INTO annotations (rid, {field}) VALUES (?, ?)
+                ON CONFLICT(rid) DO UPDATE SET {field}=excluded.{field}
+            """, (rid, value))
         conn.commit()
 
 # ── Data loading ──────────────────────────────────────────────────────────────
@@ -109,8 +125,8 @@ def load_all_data():
     df = pd.concat(frames, ignore_index=True)
     df = df.drop_duplicates(subset=["address", "last_name", "first_name"])
     df["is_muslim"] = df.apply(lambda r: is_muslim_name(r["last_name"], r["first_name"]), axis=1)
-    df["zip"] = df["city_state_zip"].str.extract(r'(\d{5})')
-    df["rid"] = df.apply(record_id, axis=1)
+    df["zip"]       = df["city_state_zip"].str.extract(r'(\d{5})')
+    df["rid"]       = df.apply(record_id, axis=1)
     return df
 
 init_db()
@@ -133,21 +149,64 @@ def apply_filters(df, q, zip_f, muslim_f, status_f, show_ignored):
         df = df[df["is_muslim"]]
     elif muslim_f == "no":
         df = df[~df["is_muslim"]]
-    if status_f:
-        rids = df["rid"].tolist()
-        ann  = get_annotations(rids)
-        df = df[df["rid"].apply(lambda r: ann.get(r, {}).get("status", "") == status_f)]
-    if not show_ignored:
-        rids = df["rid"].tolist()
-        ann  = get_annotations(rids)
-        df = df[df["rid"].apply(lambda r: not ann.get(r, {}).get("ignored", 0))]
+    if status_f or not show_ignored:
+        all_ann = get_all_annotations()
+        if status_f:
+            df = df[df["rid"].apply(lambda r: all_ann.get(r, {}).get("status", "") == status_f)]
+        if not show_ignored:
+            df = df[df["rid"].apply(lambda r: not all_ann.get(r, {}).get("ignored", 0))]
     return df
+
+def enrich(slice_df):
+    rids = slice_df["rid"].tolist()
+    ann  = get_annotations(rids)
+    records = []
+    for rec in slice_df.to_dict("records"):
+        a = ann.get(rec["rid"], {})
+        rec["last_visited"] = a.get("last_visited", "")
+        rec["comments"]     = a.get("comments", "")
+        rec["status"]       = a.get("status", "")
+        rec["ignored"]      = bool(a.get("ignored", 0))
+        records.append(rec)
+    return records
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route("/")
 @login_required
 def index():
-    return redirect(url_for("owners"))
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    total       = len(DF)
+    muslim      = int(DF["is_muslim"].sum())
+    non_muslim  = total - muslim
+
+    all_ann = get_all_annotations()
+    status_counts = {"Muslim": 0, "Non-Muslim": 0, "Not to Visit": 0}
+    visited = 0
+    ignored = 0
+    for a in all_ann.values():
+        s = a.get("status", "")
+        if s in status_counts:
+            status_counts[s] += 1
+        if a.get("last_visited"):
+            visited += 1
+        if a.get("ignored"):
+            ignored += 1
+
+    by_zip = DF.groupby("zip")["is_muslim"].agg(
+        total="count", muslim="sum"
+    ).reset_index().sort_values("total", ascending=False)
+    zip_stats = by_zip.to_dict("records")
+
+    return render_template("dashboard.html",
+        total=total, muslim=muslim, non_muslim=non_muslim,
+        status_counts=status_counts, visited=visited,
+        ignored=ignored, zip_stats=zip_stats,
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -157,7 +216,7 @@ def login():
         password = request.form.get("password", "")
         if username in USERS and check_password_hash(USERS[username], password):
             login_user(User(username))
-            return redirect(url_for("owners"))
+            return redirect(url_for("dashboard"))
         flash("Invalid username or password.")
     return render_template("login.html")
 
@@ -185,30 +244,13 @@ def owners():
     pages = max(1, (total + per_page - 1) // per_page)
     page  = min(page, pages)
     start = (page - 1) * per_page
-    slice_df = df.iloc[start:start + per_page]
-
-    rids = slice_df["rid"].tolist()
-    ann  = get_annotations(rids)
-    records = []
-    for rec in slice_df.to_dict("records"):
-        a = ann.get(rec["rid"], {})
-        rec["last_visited"] = a.get("last_visited", "")
-        rec["comments"]     = a.get("comments", "")
-        rec["status"]       = a.get("status", "")
-        rec["ignored"]      = bool(a.get("ignored", 0))
-        records.append(rec)
+    records = enrich(df.iloc[start:start + per_page])
 
     return render_template(
         "owners.html",
         records=records,
-        total=total,
-        page=page,
-        pages=pages,
-        per_page=per_page,
-        q=q,
-        zip_f=zip_f,
-        muslim_f=muslim_f,
-        status_f=status_f,
+        total=total, page=page, pages=pages, per_page=per_page,
+        q=q, zip_f=zip_f, muslim_f=muslim_f, status_f=status_f,
         show_ignored=show_ignored,
         zip_options=sorted(DF["zip"].dropna().unique()),
         status_options=STATUS_OPTIONS,
@@ -224,33 +266,42 @@ def annotate(rid):
     return jsonify(ok=True)
 
 
+@app.route("/bulk", methods=["POST"])
+@login_required
+def bulk():
+    data  = request.get_json(force=True)
+    rids  = data.get("rids", [])
+    field = data.get("field", "")
+    value = data.get("value", "")
+    if rids and field:
+        bulk_upsert(rids, field, value)
+    return jsonify(ok=True, updated=len(rids))
+
+
 @app.route("/export")
 @login_required
 def export():
-    q            = request.args.get("q", "").strip()
-    zip_f        = request.args.get("zip", "").strip()
-    muslim_f     = request.args.get("muslim", "").strip()
-    status_f     = request.args.get("status", "").strip()
-    fmt          = request.args.get("fmt", "csv")
+    q        = request.args.get("q", "").strip()
+    zip_f    = request.args.get("zip", "").strip()
+    muslim_f = request.args.get("muslim", "").strip()
+    status_f = request.args.get("status", "").strip()
+    fmt      = request.args.get("fmt", "csv")
 
-    # Ignored records are always excluded from exports
-    df = apply_filters(DF.copy(), q, zip_f, muslim_f, status_f, show_ignored=False)
-
-    rids = df["rid"].tolist()
-    ann  = get_annotations(rids)
+    df  = apply_filters(DF.copy(), q, zip_f, muslim_f, status_f, show_ignored=False)
+    ann = get_annotations(df["rid"].tolist())
 
     rows = []
     for rec in df.to_dict("records"):
         a = ann.get(rec["rid"], {})
         rows.append({
-            "Last Name":       rec["last_name"],
-            "First Name":      rec["first_name"],
-            "Address":         rec["address"],
-            "City/State/ZIP":  rec["city_state_zip"],
-            "Auto-Detected":   "Muslim" if rec["is_muslim"] else "Other",
-            "Status":          a.get("status", ""),
-            "Last Visited":    a.get("last_visited", ""),
-            "Comments":        a.get("comments", ""),
+            "Last Name":      rec["last_name"],
+            "First Name":     rec["first_name"],
+            "Address":        rec["address"],
+            "City/State/ZIP": rec["city_state_zip"],
+            "Auto-Detected":  "Muslim" if rec["is_muslim"] else "Other",
+            "Status":         a.get("status", ""),
+            "Last Visited":   a.get("last_visited", ""),
+            "Comments":       a.get("comments", ""),
         })
 
     if fmt == "xlsx":
@@ -260,12 +311,9 @@ def export():
     buf = io.StringIO()
     out_df.to_csv(buf, index=False)
     buf.seek(0)
-    return send_file(
-        io.BytesIO(buf.getvalue().encode()),
-        mimetype="text/csv",
-        as_attachment=True,
-        download_name="frisco_export.csv",
-    )
+    return send_file(io.BytesIO(buf.getvalue().encode()),
+                     mimetype="text/csv", as_attachment=True,
+                     download_name="frisco_export.csv")
 
 
 def export_xlsx(rows):
@@ -276,7 +324,6 @@ def export_xlsx(rows):
     wb = Workbook()
     ws = wb.active
     ws.title = "Frisco Export"
-
     headers = ["Last Name","First Name","Address","City/State/ZIP",
                "Auto-Detected","Status","Last Visited","Comments"]
     widths  = [20, 22, 36, 26, 14, 16, 16, 40]
@@ -301,8 +348,9 @@ def export_xlsx(rows):
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                     as_attachment=True, download_name="frisco_export.xlsx")
+    return send_file(buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name="frisco_export.xlsx")
 
 
 if __name__ == "__main__":

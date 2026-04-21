@@ -58,12 +58,12 @@
           <tr class="{% if t.expired %}expired-row{% endif %}">
             <td class="fw-semibold">{{ t.label or '—' }}</td>
             <td class="text-muted small">
-              {% set f = t.filters | tojson | fromjson %}
+              {% set f = t.filters | fromjson %}
               {% if f.get('muslim') == 'yes' %}<span class="badge" style="background:#1F4E79;">Muslim</span> {% endif %}
-              {% if f.get('zip') %}<span class="badge bg-secondary">{{ f.zip }}</span> {% endif %}
-              {% if f.get('status') %}<span class="badge bg-secondary">{{ f.status }}</span> {% endif %}
-              {% if f.get('street') %}<span class="badge bg-secondary">{{ f.street }}</span> {% endif %}
-              {% if f.get('q') %}<span class="badge bg-secondary">{{ f.q }}</span> {% endif %}
+              {% if f.get('zip') %}<span class="badge bg-secondary">{{ f.get('zip') }}</span> {% endif %}
+              {% if f.get('status') %}<span class="badge bg-secondary">{{ f.get('status') }}</span> {% endif %}
+              {% if f.get('street') %}<span class="badge bg-secondary">{{ f.get('street') }}</span> {% endif %}
+              {% if f.get('q') %}<span class="badge bg-secondary">{{ f.get('q') }}</span> {% endif %}
             </td>
             <td class="text-muted small">{{ t.created_at[:10] }}</td>
             <td class="text-muted small">{{ t.expires_at[:10] }}</td>

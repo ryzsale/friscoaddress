@@ -43,6 +43,17 @@
 
     .saving { opacity: .5; }
     .saved-flash { color: #198754; font-size: 0.7rem; }
+
+    /* map nav buttons */
+    .map-btn {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 0.7rem; padding: 1px 6px; border-radius: 4px;
+      text-decoration: none; font-weight: 500; white-space: nowrap;
+    }
+    .map-btn.gmap  { background:#e8f0fe; color:#1a73e8; }
+    .map-btn.waze  { background:#fff3cd; color:#856404; }
+    .map-btn.apple { background:#f0f0f0; color:#333; }
+    .map-btn:hover { filter: brightness(.92); }
   </style>
 </head>
 <body>
@@ -153,7 +164,23 @@
             <td class="text-muted">{{ row_start + loop.index }}</td>
             <td class="fw-semibold">{{ rec.last_name }}</td>
             <td>{{ rec.first_name }}</td>
-            <td>{{ rec.address }}</td>
+            <td>
+              {{ rec.address }}
+              <div class="mt-1 d-flex gap-1">
+                <a href="https://www.google.com/maps/search/?api=1&query={{ (rec.address ~ ' ' ~ rec.city_state_zip)|urlencode }}"
+                   target="_blank" class="map-btn gmap" title="Google Maps">
+                  <img src="https://www.google.com/favicon.ico" width="14" height="14"> Maps
+                </a>
+                <a href="https://waze.com/ul?q={{ (rec.address ~ ' ' ~ rec.city_state_zip)|urlencode }}&navigate=yes"
+                   target="_blank" class="map-btn waze" title="Waze">
+                  🚗 Waze
+                </a>
+                <a href="https://maps.apple.com/?address={{ (rec.address ~ ' ' ~ rec.city_state_zip)|urlencode }}"
+                   target="_blank" class="map-btn apple" title="Apple Maps">
+                  🍎 Apple
+                </a>
+              </div>
+            </td>
             <td class="text-muted small">{{ rec.city_state_zip }}</td>
             <td>
               {% if rec.is_muslim %}

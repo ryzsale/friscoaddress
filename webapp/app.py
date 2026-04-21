@@ -24,8 +24,11 @@ DB_PATH  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "annotations
 sys.path.insert(0, BASE_DIR)
 from muslim_filter import is_muslim_name
 
+from urllib.parse import quote_plus
+
 app = Flask(__name__)
 app.secret_key = "frisco-admin-secret-2024"
+app.jinja_env.filters["urlencode"] = quote_plus
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 login_manager = LoginManager(app)

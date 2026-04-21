@@ -40,14 +40,12 @@
     tr.ignored-row td:last-child { opacity:1; text-decoration:none; }
 
     .map-btn {
-      display:inline-flex; align-items:center; gap:3px;
-      font-size:.68rem; padding:1px 6px; border-radius:4px;
-      text-decoration:none; font-weight:500; white-space:nowrap;
+      display:inline-flex; align-items:center; gap:4px;
+      font-size:.72rem; padding:2px 8px; border-radius:4px;
+      text-decoration:none; font-weight:600; white-space:nowrap;
+      background:#e8f0fe; color:#1a73e8; border:1px solid #c5d8fd;
     }
-    .map-btn.gmap  { background:#e8f0fe; color:#1a73e8; }
-    .map-btn.waze  { background:#fff3cd; color:#856404; }
-    .map-btn.apple { background:#f0f0f0; color:#333; }
-    .map-btn:hover { filter:brightness(.92); }
+    .map-btn:hover { background:#d2e3fc; color:#1a73e8; }
 
     /* bulk action bar */
     #bulk-bar {
@@ -190,13 +188,11 @@
             <td>{{ rec.first_name }}</td>
             <td>
               {{ rec.address }}
-              <div class="mt-1 d-flex gap-1 flex-wrap">
+              <div class="mt-1">
                 <a href="https://www.google.com/maps/search/?api=1&query={{ (rec.address ~ ' ' ~ rec.city_state_zip)|urlencode }}"
-                   target="_blank" class="map-btn gmap"><img src="https://www.google.com/favicon.ico" width="12"> Maps</a>
-                <a href="https://waze.com/ul?q={{ (rec.address ~ ' ' ~ rec.city_state_zip)|urlencode }}&navigate=yes"
-                   target="_blank" class="map-btn waze">🚗 Waze</a>
-                <a href="https://maps.apple.com/?address={{ (rec.address ~ ' ' ~ rec.city_state_zip)|urlencode }}"
-                   target="_blank" class="map-btn apple">🍎 Apple</a>
+                   target="_blank" class="map-btn">
+                  <img src="https://maps.gstatic.com/favicon3.ico" width="13" height="13"> Google Maps
+                </a>
               </div>
             </td>
             <td class="text-muted small">{{ rec.city_state_zip }}</td>
@@ -246,13 +242,11 @@
         <input type="checkbox" class="form-check-input row-chk" data-rid="{{ rec.rid }}">
       </div>
       <div class="addr mb-2">{{ rec.address }}<br><span class="text-muted">{{ rec.city_state_zip }}</span></div>
-      <div class="d-flex gap-1 mb-2 flex-wrap">
+      <div class="mb-2">
         <a href="https://www.google.com/maps/search/?api=1&query={{ (rec.address ~ ' ' ~ rec.city_state_zip)|urlencode }}"
-           target="_blank" class="map-btn gmap"><img src="https://www.google.com/favicon.ico" width="12"> Maps</a>
-        <a href="https://waze.com/ul?q={{ (rec.address ~ ' ' ~ rec.city_state_zip)|urlencode }}&navigate=yes"
-           target="_blank" class="map-btn waze">🚗 Waze</a>
-        <a href="https://maps.apple.com/?address={{ (rec.address ~ ' ' ~ rec.city_state_zip)|urlencode }}"
-           target="_blank" class="map-btn apple">🍎 Apple</a>
+           target="_blank" class="map-btn">
+          <img src="https://maps.gstatic.com/favicon3.ico" width="13" height="13"> Google Maps
+        </a>
       </div>
       <div class="row g-2">
         <div class="col-6">

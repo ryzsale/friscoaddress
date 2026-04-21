@@ -29,3 +29,7 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Data files (contain personal information)
+*.csv
+*.xlsx
+

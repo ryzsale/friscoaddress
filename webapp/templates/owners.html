@@ -199,7 +199,7 @@
             <td class="text-muted small">{{ rec.city_state_zip }}</td>
             <td>
               {% if rec.is_muslim %}<span class="badge badge-muslim">Muslim</span>
-              {% else %}<span class="badge badge-auto">Other</span>{% endif %}
+              {% else %}<span class="badge badge-auto">Not Confirmed</span>{% endif %}
             </td>
             <td>
               <select class="inline-select" onchange="save('{{ rec.rid }}','status',this.value,this)">

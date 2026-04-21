@@ -80,6 +80,7 @@
     <div class="navbar-nav ms-3 d-flex flex-row gap-2">
       <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
       <a class="nav-link active" href="{{ url_for('owners') }}">Owners</a>
+      <a class="nav-link" href="{{ url_for('streets') }}">Streets</a>
     </div>
     <div class="ms-auto d-flex align-items-center gap-3">
       <span class="text-white-50 small d-none d-md-inline">{{ current_user.id }}</span>
@@ -315,6 +316,8 @@
           class="btn btn-sm btn-warning">Ignore All</button>
   <button onclick="bulkApply('ignored', 0)"
           class="btn btn-sm btn-outline-light">Un-ignore All</button>
+  <button onclick="bulkRoute()"
+          class="btn btn-sm btn-warning">🗺 Build Route</button>
   <button onclick="clearSelection()" class="btn btn-sm btn-outline-light ms-auto">✕ Cancel</button>
 </div>
 
@@ -363,6 +366,23 @@ function clearSelection() {
   const all = document.getElementById('chk-all');
   if (all) all.checked = false;
   updateBulkBar();
+}
+
+function bulkRoute() {
+  const rids = selectedRids();
+  if (!rids.length) return;
+  // Collect addresses from selected rows
+  const addrs = rids.map(rid => {
+    const row  = document.getElementById('row-' + rid) || document.getElementById('card-' + rid);
+    if (!row) return null;
+    const cells = row.querySelectorAll('td');
+    // address is col 4 (index 4), city is col 5
+    const addr = cells[4]?.childNodes[0]?.textContent?.trim();
+    const city = cells[5]?.textContent?.trim();
+    return addr && city ? encodeURIComponent(addr + ', ' + city) : null;
+  }).filter(Boolean).slice(0, 10);
+  if (!addrs.length) return;
+  window.open('https://www.google.com/maps/dir/' + addrs.join('/') + '/', '_blank');
 }
 
 async function bulkApply(field, value) {

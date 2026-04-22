@@ -95,7 +95,7 @@ def render():
 
     edited = st.data_editor(
         df[display_cols], column_config=col_config,
-        use_container_width=True, hide_index=True, key="owners_editor",
+        use_container_width=True, hide_index=True, key="owners_editor_v2",
     )
 
     # Save changes — convert date back to ISO string for the API

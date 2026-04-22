@@ -77,7 +77,9 @@ def render():
     df = pd.DataFrame(records)
     df["Auto"] = df["is_muslim"].map({True: "Muslim", False: "Not Confirmed"})
 
-    # Editable columns via st.data_editor
+    # Convert last_visited string → datetime.date for DateColumn compatibility
+    df["last_visited"] = pd.to_datetime(df["last_visited"], errors="coerce").dt.date
+
     display_cols = ["last_name","first_name","address","city_state_zip","Auto","status","last_visited","comments","ignored"]
     col_config = {
         "last_name":      st.column_config.TextColumn("Last Name",    disabled=True),
@@ -96,16 +98,16 @@ def render():
         use_container_width=True, hide_index=True, key="owners_editor",
     )
 
-    # Save changes
+    # Save changes — convert date back to ISO string for the API
     changed = df[display_cols].compare(edited, result_names=("orig","new"))
     if not changed.empty:
         for idx in changed.index.get_level_values(0).unique():
             rid = df.loc[idx, "rid"]
             row = edited.loc[idx]
-            lv  = str(row["last_visited"]) if pd.notna(row["last_visited"]) else ""
+            lv  = row["last_visited"].isoformat() if pd.notna(row["last_visited"]) else ""
             r2  = api.patch(f"/annotations/{rid}", json={
                 "status":       row["status"] or "",
-                "last_visited": lv if lv != "NaT" else "",
+                "last_visited": lv,
                 "comments":     row["comments"] or "",
                 "ignored":      int(row["ignored"]),
             })

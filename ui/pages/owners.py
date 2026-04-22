@@ -77,8 +77,8 @@ def render():
     df = pd.DataFrame(records)
     df["Auto"] = df["is_muslim"].map({True: "Muslim", False: "Not Confirmed"})
 
-    # Convert last_visited string → datetime.date for DateColumn compatibility
-    df["last_visited"] = pd.to_datetime(df["last_visited"], errors="coerce").dt.date
+    # Keep as datetime64[ns] — DateColumn requires this dtype, not object/date
+    df["last_visited"] = pd.to_datetime(df["last_visited"], errors="coerce")
 
     display_cols = ["last_name","first_name","address","city_state_zip","Auto","status","last_visited","comments","ignored"]
     col_config = {

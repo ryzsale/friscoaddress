@@ -35,6 +35,14 @@ def list_zipcodes(_: str = Depends(get_current_user)):
     return result
 
 
+@router.post("/reload")
+def reload_data(_: str = Depends(get_current_user)):
+    """Force a full reload of all CSV data into the in-memory cache."""
+    df = reload_dataframe()
+    counts = df.groupby("zip").size().to_dict() if not df.empty else {}
+    return {"ok": True, "total": len(df), "by_zip": counts}
+
+
 @router.post("/{zip_code}")
 def add_zipcode(zip_code: str, _: str = Depends(get_current_user)):
     """Download data for a ZIP code if not already present, then reload."""

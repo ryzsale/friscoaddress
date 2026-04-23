@@ -8,6 +8,19 @@ import api_client as api
 def render():
     st.title("📍 ZIP Code Management")
 
+    # ── Reload control ─────────────────────────────────────────────────────────
+    col_title, col_reload = st.columns([5, 1])
+    with col_reload:
+        if st.button("🔄 Reload Data", use_container_width=True, help="Force the API to reload all CSV files into memory"):
+            with st.spinner("Reloading..."):
+                rr = api.post("/zipcodes/reload", json={})
+            if rr.ok:
+                result = rr.json()
+                st.success(f"Reloaded — **{result['total']:,}** total records")
+                st.rerun()
+            else:
+                st.error("Reload failed")
+
     # ── Current ZIPs ───────────────────────────────────────────────────────────
     r = api.get("/zipcodes")
     if r.ok:
@@ -21,7 +34,7 @@ def render():
         total_records = sum(z["records"] for z in zips)
         st.caption(f"**{len(zips)}** ZIP codes · **{total_records:,}** total records")
         for z in zips:
-            col1, col2, col3 = st.columns([2, 2, 1])
+            col1, col2, col3 = st.columns([2, 3, 1])
             col1.markdown(f"**{z['zip']}**")
             col2.caption(f"{z['records']:,} records — `{z['file']}`")
             if col3.button("Remove", key=f"del_{z['zip']}", type="secondary"):

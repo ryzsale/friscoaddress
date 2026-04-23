@@ -14,8 +14,8 @@ from muslim_filter import is_muslim_name
 CSV_FILES = [
     BASE_DIR / "frisco_75033.csv",
     BASE_DIR / "frisco_75034.csv",
+    BASE_DIR / "frisco_75035.csv",
     BASE_DIR / "frisco_75036.csv",
-    BASE_DIR / "test_output.csv",
 ]
 
 def _record_id(rec) -> str:

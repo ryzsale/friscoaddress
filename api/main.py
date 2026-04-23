@@ -1,15 +1,28 @@
 """Frisco Address — FastAPI enterprise backend."""
 import logging
-from fastapi import FastAPI, Depends, HTTPException, status
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import verify_password, create_token, USERS
 from .database import init_db
 from .schemas import TokenRequest, TokenResponse
-from .routers import owners, annotations, streets, export, shares
+from .routers import owners, annotations, streets, export, shares, zipcodes
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    log.info("Database initialized")
+    from .data import get_dataframe
+    df = get_dataframe()
+    log.info(f"Loaded {len(df):,} property records")
+    yield
+
 
 app = FastAPI(
     title="Frisco Address Admin API",
@@ -17,6 +30,7 @@ app = FastAPI(
     version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -32,15 +46,7 @@ app.include_router(annotations.router)
 app.include_router(streets.router)
 app.include_router(export.router)
 app.include_router(shares.router)
-
-
-@app.on_event("startup")
-def startup():
-    init_db()
-    log.info("Database initialized")
-    from .data import get_dataframe
-    df = get_dataframe()
-    log.info(f"Loaded {len(df):,} property records")
+app.include_router(zipcodes.router)
 
 
 @app.post("/auth/token", response_model=TokenResponse, tags=["auth"])

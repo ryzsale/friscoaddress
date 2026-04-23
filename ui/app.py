@@ -35,7 +35,7 @@ with st.sidebar:
     st.markdown("### 🏠 Frisco Admin")
     st.markdown(f"Logged in as **{st.session_state.get('username')}**")
     st.markdown("---")
-    page = st.radio("Navigate", ["📊 Dashboard", "👥 Owners", "🏘 Streets", "🔗 Shared Links"], label_visibility="collapsed")
+    page = st.radio("Navigate", ["📊 Dashboard", "👥 Owners", "🏘 Streets", "🔗 Shared Links", "📍 ZIP Codes"], label_visibility="collapsed")
     st.markdown("---")
     if st.button("Logout", use_container_width=True):
         api.logout()
@@ -50,5 +50,7 @@ elif page == "🏘 Streets":
     import pages.streets as pg
 elif page == "🔗 Shared Links":
     import pages.shares as pg
+elif page == "📍 ZIP Codes":
+    import pages.zipcodes as pg
 
 pg.render()

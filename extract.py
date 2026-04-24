@@ -5,6 +5,7 @@ import csv
 import re
 import sys
 import argparse
+import time
 import requests
 
 BASE_URL = (
@@ -12,6 +13,10 @@ BASE_URL = (
     "/NotificationParcels/MapServer/2/query"
 )
 PAGE_SIZE = 2000
+CONNECT_TIMEOUT = 10
+READ_TIMEOUT = 90
+MAX_RETRIES = 4
+RETRY_BACKOFF_SECONDS = 2
 
 ENTITY_KEYWORDS = re.compile(
     r"\b(TRUST|LLC|INC|CORP|LP|LLP|LTD|ASSOC|ASSOCIATION|PARTNERSHIP|"
@@ -20,17 +25,47 @@ ENTITY_KEYWORDS = re.compile(
 )
 
 
-def fetch_page(zip_code: str, offset: int) -> dict:
+def fetch_page(zip_code: str, offset: int, session: requests.Session) -> dict:
     params = {
         "where": f"OWNER_CITY_ST_ZIP LIKE '%{zip_code}%'",
         "outFields": "OWNER_NAME,OWNER_ADDR_LINE1,OWNER_ADDR_LINE2,OWNER_ADDR_LINE3,OWNER_CITY_ST_ZIP",
         "resultRecordCount": PAGE_SIZE,
         "resultOffset": offset,
+        "returnGeometry": "false",
         "f": "json",
     }
-    resp = requests.get(BASE_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+    last_error: Exception | None = None
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            resp = session.get(BASE_URL, params=params, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT))
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.Timeout as exc:
+            last_error = exc
+            if attempt == MAX_RETRIES:
+                break
+            wait_seconds = RETRY_BACKOFF_SECONDS * attempt
+            print(
+                f"  request timed out for zip {zip_code} at offset {offset}; retrying in {wait_seconds}s "
+                f"({attempt}/{MAX_RETRIES})...",
+                file=sys.stderr,
+            )
+            time.sleep(wait_seconds)
+        except requests.exceptions.RequestException as exc:
+            last_error = exc
+            if attempt == MAX_RETRIES:
+                break
+            wait_seconds = RETRY_BACKOFF_SECONDS * attempt
+            print(
+                f"  request failed for zip {zip_code} at offset {offset}; retrying in {wait_seconds}s "
+                f"({attempt}/{MAX_RETRIES})...",
+                file=sys.stderr,
+            )
+            time.sleep(wait_seconds)
+
+    assert last_error is not None
+    raise last_error
 
 
 def parse_name(raw: str) -> tuple[str, str] | None:
@@ -65,46 +100,51 @@ def extract(zip_code: str, include_entities: bool = False) -> list[dict]:
     records = []
     offset = 0
     print(f"Fetching records for zip {zip_code}...")
+    session = requests.Session()
+    session.headers.update({"User-Agent": "FriscoAddressHub/1.0"})
 
-    while True:
-        data = fetch_page(zip_code, offset)
+    try:
+        while True:
+            data = fetch_page(zip_code, offset, session)
 
-        if "error" in data:
-            print(f"API error: {data['error']}", file=sys.stderr)
-            break
+            if "error" in data:
+                print(f"API error: {data['error']}", file=sys.stderr)
+                break
 
-        features = data.get("features", [])
-        if not features:
-            break
+            features = data.get("features", [])
+            if not features:
+                break
 
-        for feat in features:
-            attrs = feat.get("attributes", {})
-            raw_name = attrs.get("OWNER_NAME", "")
-            parsed = parse_name(raw_name)
+            for feat in features:
+                attrs = feat.get("attributes", {})
+                raw_name = attrs.get("OWNER_NAME", "")
+                parsed = parse_name(raw_name)
 
-            if parsed is None:
-                if include_entities:
-                    records.append({
-                        "last_name": raw_name,
-                        "first_name": "",
-                        "address": build_address(attrs),
-                        "city_state_zip": attrs.get("OWNER_CITY_ST_ZIP", ""),
-                    })
-                continue
+                if parsed is None:
+                    if include_entities:
+                        records.append({
+                            "last_name": raw_name,
+                            "first_name": "",
+                            "address": build_address(attrs),
+                            "city_state_zip": attrs.get("OWNER_CITY_ST_ZIP", ""),
+                        })
+                    continue
 
-            last, first = parsed
-            records.append({
-                "last_name": last,
-                "first_name": first,
-                "address": build_address(attrs),
-                "city_state_zip": attrs.get("OWNER_CITY_ST_ZIP", ""),
-            })
+                last, first = parsed
+                records.append({
+                    "last_name": last,
+                    "first_name": first,
+                    "address": build_address(attrs),
+                    "city_state_zip": attrs.get("OWNER_CITY_ST_ZIP", ""),
+                })
 
-        print(f"  fetched {offset + len(features)} records so far...")
+            print(f"  fetched {offset + len(features)} records so far...")
 
-        if len(features) < PAGE_SIZE:
-            break
-        offset += PAGE_SIZE
+            if len(features) < PAGE_SIZE:
+                break
+            offset += PAGE_SIZE
+    finally:
+        session.close()
 
     return records
 
